@@ -9,3 +9,8 @@ coverage/
 *.log
 .DS_Store
 .turbo/
+docker-compose.override.yml
+.vscode/
+.idea/
+*.pem
+*.key
