@@ -40,3 +40,25 @@ package (e.g. `apps/api`) is created in a later phase, so it type-checks
 that package instead of printing a placeholder.
 
 **Reversal conditions:** N/A — this is the standard monorepo pattern going forward.
+
+---
+
+## 2026-07-22 — PostgreSQL 18 volume mount path change
+
+**Status:** Accepted
+
+**Context:** PostgreSQL 18's official Docker image changed its expected
+data directory layout. Mounting a volume directly at
+`/var/lib/postgresql/data` (the pre-18 convention) causes the container to
+detect a "mismatched" layout and refuse to start, restarting in a loop.
+
+**Decision:** Mount the `postgres_data` volume at `/var/lib/postgresql`
+instead (one level up); the image manages the version-specific
+subdirectory internally.
+
+**Consequences:** Any future PostgreSQL major-version upgrade should be
+done via `pg_upgrade`, not a plain image tag bump, per the image's own
+documentation.
+
+**Reversal conditions:** N/A — this matches the current official image's
+required layout.
