@@ -22,15 +22,16 @@ enum OrganizationRole {
 }
 
 model User {
-  id           String       @id @default(uuid())
-  email        String       @unique
-  passwordHash String?
-  firstName    String
-  lastName     String?
-  status       UserStatus   @default(INVITED)
-  memberships  Membership[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id              String       @id @default(uuid())
+  email           String       @unique
+  passwordHash    String?
+  firstName       String
+  lastName        String?
+  status          UserStatus   @default(INVITED)
+  memberships     Membership[]
+  sentInvitations Invitation[] @relation("InvitationInviter")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 }
 
 model Organization {
@@ -39,6 +40,7 @@ model Organization {
   slug        String       @unique
   isActive    Boolean      @default(true)
   memberships Membership[]
+  invitations Invitation[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -56,4 +58,25 @@ model Membership {
   @@unique([userId, organizationId])
   @@index([organizationId])
   @@index([userId])
+}
+
+model Invitation {
+  id             String           @id @default(uuid())
+  organizationId String
+  email          String
+  role           OrganizationRole @default(AGENT)
+  tokenHash      String           @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  invitedById    String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy      User             @relation("InvitationInviter", fields: [invitedById], references: [id], onDelete: Restrict)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId, email])
+  @@index([organizationId])
+  @@index([invitedById])
+  @@index([expiresAt])
 }
