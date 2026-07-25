@@ -11,6 +11,7 @@ import { HealthModule } from './health/health.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { TicketsModule } from './tickets/tickets.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AuthModule,
     InvitationsModule,
     OrganizationsModule,
+    TicketsModule,
   ],
   controllers: [AppController],
   providers: [

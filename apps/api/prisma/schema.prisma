@@ -21,6 +21,38 @@ enum OrganizationRole {
   VIEWER
 }
 
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TicketSource {
+  MANUAL
+  EMAIL
+  WHATSAPP
+  TELEGRAM
+  WEB
+}
+
+enum TicketCategory {
+  GENERAL
+  NEW_CONFIGURATION
+  TROUBLESHOOTING
+  SUBSCRIPTION
+  RMA
+  FEATURE_REQUEST
+}
+
 model User {
   id              String       @id @default(uuid())
   email           String       @unique
@@ -30,19 +62,23 @@ model User {
   status          UserStatus   @default(INVITED)
   memberships     Membership[]
   sentInvitations Invitation[] @relation("InvitationInviter")
+  createdTickets  Ticket[]     @relation("TicketCreator")
+  assignedTickets Ticket[]     @relation("TicketAssignee")
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 }
 
 model Organization {
-  id          String       @id @default(uuid())
-  name        String
-  slug        String       @unique
-  isActive    Boolean      @default(true)
-  memberships Membership[]
-  invitations Invitation[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id            String         @id @default(uuid())
+  name          String
+  slug          String         @unique
+  isActive      Boolean        @default(true)
+  memberships   Membership[]
+  invitations   Invitation[]
+  tickets       Ticket[]
+  ticketCounter TicketCounter?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model Membership {
@@ -79,4 +115,42 @@ model Invitation {
   @@index([organizationId])
   @@index([invitedById])
   @@index([expiresAt])
+}
+
+model TicketCounter {
+  organizationId String       @id
+  nextNumber     Int          @default(1)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  updatedAt      DateTime     @updatedAt
+}
+
+model Ticket {
+  id             String         @id @default(uuid())
+  organizationId String
+  number         Int
+  subject        String
+  description    String?
+  status         TicketStatus   @default(OPEN)
+  priority       TicketPriority @default(NORMAL)
+  source         TicketSource   @default(MANUAL)
+  category       TicketCategory @default(GENERAL)
+  requesterName  String?
+  requesterEmail String?
+  requesterPhone String?
+  createdById    String
+  assignedToId   String?
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User           @relation("TicketCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo     User?          @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([organizationId, priority])
+  @@index([organizationId, assignedToId])
+  @@index([organizationId, createdAt])
+  @@index([createdById])
 }
