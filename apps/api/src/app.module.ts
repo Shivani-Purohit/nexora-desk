@@ -12,6 +12,8 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { CustomersModule } from './customers/customers.module';
+import { TicketCommentsModule } from './ticket-comments/ticket-comments.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { TicketsModule } from './tickets/tickets.module';
     InvitationsModule,
     OrganizationsModule,
     TicketsModule,
+    CustomersModule,
+    TicketCommentsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -8,6 +8,10 @@ datasource db {
   provider = "postgresql"
 }
 
+// ----------------------------------------------------
+// ENUMS
+// ----------------------------------------------------
+
 enum UserStatus {
   ACTIVE
   INVITED
@@ -53,29 +57,49 @@ enum TicketCategory {
   FEATURE_REQUEST
 }
 
+enum ActivityType {
+  COMMENT_ADDED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  ASSIGNMENT_CHANGED
+  CATEGORY_CHANGED
+  ATTACHMENT_ADDED
+  SLA_BREACHED
+  SYSTEM_LOG
+}
+
+// ----------------------------------------------------
+// MODELS
+// ----------------------------------------------------
+
 model User {
-  id              String       @id @default(uuid())
-  email           String       @unique
+  id              String           @id @default(uuid())
+  email           String           @unique
   passwordHash    String?
   firstName       String
   lastName        String?
-  status          UserStatus   @default(INVITED)
+  status          UserStatus       @default(INVITED)
   memberships     Membership[]
-  sentInvitations Invitation[] @relation("InvitationInviter")
-  createdTickets  Ticket[]     @relation("TicketCreator")
-  assignedTickets Ticket[]     @relation("TicketAssignee")
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  sentInvitations Invitation[]     @relation("InvitationInviter")
+  createdTickets  Ticket[]         @relation("TicketCreator")
+  assignedTickets Ticket[]         @relation("TicketAssignee")
+  comments        TicketComment[]
+  activities      TicketActivity[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
 model Organization {
-  id            String         @id @default(uuid())
-  name          String
-  slug          String         @unique
-  isActive      Boolean        @default(true)
-  memberships   Membership[]
-  invitations   Invitation[]
-  tickets       Ticket[]
+  id       String  @id @default(uuid())
+  name     String
+  slug     String  @unique
+  isActive Boolean @default(true)
+
+  memberships Membership[]
+  invitations Invitation[]
+  customers   Customer[]
+  tickets     Ticket[]
+
   ticketCounter TicketCounter?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -125,32 +149,129 @@ model TicketCounter {
 }
 
 model Ticket {
-  id             String         @id @default(uuid())
+  id             String  @id @default(uuid())
   organizationId String
-  number         Int
-  subject        String
-  description    String?
-  status         TicketStatus   @default(OPEN)
-  priority       TicketPriority @default(NORMAL)
-  source         TicketSource   @default(MANUAL)
-  category       TicketCategory @default(GENERAL)
-  requesterName  String?
-  requesterEmail String?
-  requesterPhone String?
-  createdById    String
-  assignedToId   String?
-  resolvedAt     DateTime?
-  closedAt       DateTime?
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      User           @relation("TicketCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  assignedTo     User?          @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  customerId     String?
+
+  number      Int
+  subject     String
+  description String?
+
+  status   TicketStatus   @default(OPEN)
+  priority TicketPriority @default(NORMAL)
+  source   TicketSource   @default(MANUAL)
+  category TicketCategory @default(GENERAL)
+
+  createdById String
+  assignedToId String?
+
+  resolvedAt DateTime?
+  closedAt   DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  createdBy User  @relation("TicketCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo User? @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  comments    TicketComment[]
+  activities  TicketActivity[]
+  attachments TicketAttachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([organizationId, priority])
   @@index([organizationId, assignedToId])
   @@index([organizationId, createdAt])
+  @@index([customerId])
   @@index([createdById])
+}
+
+model Customer {
+  id             String @id @default(uuid())
+  organizationId String
+
+  firstName String
+  lastName  String?
+
+  email String?
+  phone String?
+
+  company String?
+
+  notes String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  tickets Ticket[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([phone])
+}
+
+model TicketComment {
+  id String @id @default(uuid())
+
+  ticketId String
+  authorId String
+
+  message String @db.Text
+
+  isInternal Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  activity TicketActivity?
+
+  @@index([ticketId])
+  @@index([authorId])
+}
+
+model TicketActivity {
+  id String @id @default(uuid())
+
+  ticketId String
+  actorId  String?
+
+  type     ActivityType
+  metadata Json?
+
+  commentId String? @unique
+
+  ticket  Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor   User?          @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  comment TicketComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([actorId])
+}
+
+model TicketAttachment {
+  id String @id @default(uuid())
+
+  ticketId String
+
+  fileName String
+  fileSize Int
+  mimeType String
+  fileUrl  String
+
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 }

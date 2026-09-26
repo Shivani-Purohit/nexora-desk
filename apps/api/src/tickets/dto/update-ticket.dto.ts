@@ -1,8 +1,6 @@
 import {
-  IsEmail,
   IsEnum,
   IsOptional,
-  IsPhoneNumber,
   IsString,
   IsUUID,
   MaxLength,
@@ -44,19 +42,8 @@ export class UpdateTicketDto {
   category?: TicketCategory;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(150)
-  requesterName?: string;
-
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(254)
-  requesterEmail?: string;
-
-  @IsOptional()
-  @IsPhoneNumber()
-  @MaxLength(30)
-  requesterPhone?: string;
+  @IsUUID()
+  customerId?: string;
 
   @IsOptional()
   @IsUUID()

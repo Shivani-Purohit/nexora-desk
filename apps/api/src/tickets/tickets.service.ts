@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  ActivityType,
   TicketStatus,
   UserStatus,
 } from '../generated/prisma/enums';
@@ -16,6 +17,8 @@ import {
 } from './dto';
 
 const ticketRelations = {
+  customer: true,
+
   createdBy: {
     select: {
       id: true,
@@ -24,6 +27,7 @@ const ticketRelations = {
       lastName: true,
     },
   },
+
   assignedTo: {
     select: {
       id: true,
@@ -70,7 +74,7 @@ export class TicketsService {
 
       const ticketNumber = counter.nextNumber - 1;
 
-      return transaction.ticket.create({
+      const ticket = await transaction.ticket.create({
         data: {
           organizationId,
           number: ticketNumber,
@@ -79,14 +83,24 @@ export class TicketsService {
           priority: dto.priority,
           source: dto.source,
           category: dto.category,
-          requesterName: this.cleanOptionalText(dto.requesterName),
-          requesterEmail: dto.requesterEmail?.trim().toLowerCase(),
-          requesterPhone: dto.requesterPhone?.trim(),
+          customerId: dto.customerId,
           createdById,
           assignedToId: dto.assignedToId,
         },
         include: ticketRelations,
       });
+
+      // Automatically log ticket creation activity
+      await transaction.ticketActivity.create({
+        data: {
+          ticketId: ticket.id,
+          actorId: createdById,
+          type: ActivityType.SYSTEM_LOG,
+          metadata: { action: 'TICKET_CREATED', number: ticket.number },
+        },
+      });
+
+      return ticket;
     });
   }
 
@@ -122,20 +136,32 @@ export class TicketsService {
                 },
               },
               {
-                requesterName: {
-                  contains: search,
-                  mode: 'insensitive',
+                customer: {
+                  is: {
+                    firstName: {
+                      contains: search,
+                      mode: 'insensitive',
+                    },
+                  },
                 },
               },
               {
-                requesterEmail: {
-                  contains: search,
-                  mode: 'insensitive',
+                customer: {
+                  is: {
+                    email: {
+                      contains: search,
+                      mode: 'insensitive',
+                    },
+                  },
                 },
               },
               {
-                requesterPhone: {
-                  contains: search,
+                customer: {
+                  is: {
+                    phone: {
+                      contains: search,
+                    },
+                  },
                 },
               },
             ],
@@ -194,6 +220,7 @@ export class TicketsService {
     organizationId: string,
     ticketNumber: number,
     dto: UpdateTicketDto,
+    actorId?: string,
   ) {
     const existingTicket = await this.prisma.ticket.findUnique({
       where: {
@@ -205,6 +232,8 @@ export class TicketsService {
       select: {
         id: true,
         status: true,
+        priority: true,
+        assignedToId: true,
         resolvedAt: true,
       },
     });
@@ -223,36 +252,87 @@ export class TicketsService {
       dto.status,
     );
 
-    return this.prisma.ticket.update({
-      where: {
-        id: existingTicket.id,
+    return this.prisma.$transaction(async (tx) => {
+      const updatedTicket = await tx.ticket.update({
+        where: {
+          id: existingTicket.id,
+        },
+        data: {
+          subject: dto.subject?.trim(),
+          description:
+            dto.description === undefined
+              ? undefined
+              : this.cleanOptionalText(dto.description),
+          status: dto.status,
+          priority: dto.priority,
+          source: dto.source,
+          category: dto.category,
+          customerId: dto.customerId,
+          assignedToId: dto.assignedToId,
+          ...timestamps,
+        },
+        include: ticketRelations,
+      });
+
+      // Automatically record activity logs for status / priority / assignee changes
+      if (dto.status && dto.status !== existingTicket.status) {
+        await tx.ticketActivity.create({
+          data: {
+            ticketId: existingTicket.id,
+            actorId: actorId ?? null,
+            type: ActivityType.STATUS_CHANGED,
+            metadata: { from: existingTicket.status, to: dto.status },
+          },
+        });
+      }
+
+      if (dto.priority && dto.priority !== existingTicket.priority) {
+        await tx.ticketActivity.create({
+          data: {
+            ticketId: existingTicket.id,
+            actorId: actorId ?? null,
+            type: ActivityType.PRIORITY_CHANGED,
+            metadata: { from: existingTicket.priority, to: dto.priority },
+          },
+        });
+      }
+
+      if (dto.assignedToId !== undefined && dto.assignedToId !== existingTicket.assignedToId) {
+        await tx.ticketActivity.create({
+          data: {
+            ticketId: existingTicket.id,
+            actorId: actorId ?? null,
+            type: ActivityType.ASSIGNMENT_CHANGED,
+            metadata: { from: existingTicket.assignedToId, to: dto.assignedToId },
+          },
+        });
+      }
+
+      return updatedTicket;
+    });
+  }
+
+  /**
+   * Fetch complete timeline (Comments + System events) for a ticket
+   */
+  async getTicketTimeline(organizationId: string, ticketNumber: number) {
+    const ticket = await this.getByNumber(organizationId, ticketNumber);
+
+    return this.prisma.ticketActivity.findMany({
+      where: { ticketId: ticket.id },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        actor: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+        comment: {
+          include: {
+            author: {
+              select: { id: true, firstName: true, lastName: true, email: true },
+            },
+          },
+        },
       },
-      data: {
-        subject: dto.subject?.trim(),
-        description:
-          dto.description === undefined
-            ? undefined
-            : this.cleanOptionalText(dto.description),
-        status: dto.status,
-        priority: dto.priority,
-        source: dto.source,
-        category: dto.category,
-        requesterName:
-          dto.requesterName === undefined
-            ? undefined
-            : this.cleanOptionalText(dto.requesterName),
-        requesterEmail:
-          dto.requesterEmail === undefined
-            ? undefined
-            : dto.requesterEmail.trim().toLowerCase(),
-        requesterPhone:
-          dto.requesterPhone === undefined
-            ? undefined
-            : dto.requesterPhone.trim(),
-        assignedToId: dto.assignedToId,
-        ...timestamps,
-      },
-      include: ticketRelations,
     });
   }
 

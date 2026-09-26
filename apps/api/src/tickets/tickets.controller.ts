@@ -77,6 +77,25 @@ export class TicketsController {
     );
   }
 
+  @Get(':ticketNumber/timeline')
+  @OrganizationRoles(
+    OrganizationRole.OWNER,
+    OrganizationRole.ADMIN,
+    OrganizationRole.AGENT,
+    OrganizationRole.VIEWER,
+  )
+  getTimeline(
+    @Param('organizationId', new ParseUUIDPipe())
+    organizationId: string,
+    @Param('ticketNumber', ParseIntPipe)
+    ticketNumber: number,
+  ) {
+    return this.ticketsService.getTicketTimeline(
+      organizationId,
+      ticketNumber,
+    );
+  }
+
   @Patch(':ticketNumber')
   @OrganizationRoles(
     OrganizationRole.OWNER,
@@ -88,12 +107,14 @@ export class TicketsController {
     organizationId: string,
     @Param('ticketNumber', ParseIntPipe)
     ticketNumber: number,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateTicketDto,
   ) {
     return this.ticketsService.update(
       organizationId,
       ticketNumber,
       dto,
+      user.id,
     );
   }
 }
